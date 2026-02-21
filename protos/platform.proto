@@ -1,0 +1,157 @@
+syntax = "proto3";
+
+package platform;
+
+// Coordinator Service - runs on main server
+service Coordinator {
+    // Worker calls this to join the cluster
+    rpc RegisterWorker (WorkerInfo) returns (RegistrationResponse);
+    
+    // Worker sends heartbeats every 5 seconds
+    rpc Heartbeat (HeartbeatRequest) returns (HeartbeatResponse);
+    
+    // Client submits training job
+    rpc SubmitJob (JobRequest) returns (JobResponse);
+    
+    // Get current cluster status
+    rpc GetStatus (Empty) returns (ClusterStatus);
+    
+    // Stream job logs
+    rpc StreamJobLogs (JobLogRequest) returns (stream LogEntry);
+}
+
+// Worker Service - runs on each worker
+service Worker {
+    // Coordinator tells worker to start training
+    rpc StartTraining (TrainingTask) returns (stream TrainingUpdate);
+    
+    // Coordinator asks worker to stop
+    rpc StopTraining (StopRequest) returns (StopResponse);
+    
+    // Health check
+    rpc Ping (Empty) returns (Pong);
+}
+
+// Message Definitions
+message WorkerInfo {
+    string worker_id = 1;
+    string hostname = 2;
+    int32 port = 3;
+    int32 gpu_count = 4;
+    float memory_gb = 5;
+    int32 cpu_cores = 6;
+    string ip_address = 7;
+}
+
+message RegistrationResponse {
+    bool success = 1;
+    string message = 2;
+    string assigned_id = 3;
+}
+
+message HeartbeatRequest {
+    string worker_id = 1;
+    float cpu_utilization = 2;
+    float memory_utilization = 3;
+    float gpu_utilization = 4;
+    int32 active_jobs = 5;
+}
+
+message HeartbeatResponse {
+    bool acknowledged = 1;
+    repeated string pending_commands = 2;
+}
+
+message JobRequest {
+    string model_type = 1;      // 'mnist_cnn', 'cifar_resnet'
+    int32 num_workers = 2;
+    int32 epochs = 3;
+    int32 batch_size = 4;
+    string dataset = 5;          // 'mnist', 'cifar10'
+    string job_name = 6;          // Optional user-friendly name
+}
+
+message JobResponse {
+    bool accepted = 1;
+    string job_id = 2;
+    string message = 3;
+    int32 estimated_time_seconds = 4;
+}
+
+message TrainingTask {
+    string job_id = 1;
+    string model_type = 2;
+    int32 world_size = 3;
+    int32 rank = 4;
+    string master_addr = 5;
+    int32 master_port = 6;
+    int32 epochs = 7;
+    int32 batch_size = 8;
+    string dataset = 9;
+    int32 total_steps = 10;
+}
+
+message TrainingUpdate {
+    int32 epoch = 1;
+    int32 step = 2;
+    float loss = 3;
+    float accuracy = 4;
+    int64 samples_processed = 5;
+    float learning_rate = 6;
+    float time_per_step_ms = 7;
+}
+
+message StopRequest {
+    string job_id = 1;
+    string reason = 2;
+}
+
+message StopResponse {
+    bool stopped = 1;
+    string final_status = 2;
+}
+
+message Empty {}
+
+message Pong {
+    bool alive = 1;
+    float timestamp = 2;
+}
+
+message ClusterStatus {
+    repeated WorkerInfo workers = 1;
+    repeated JobSummary jobs = 2;
+    int32 total_cpu_cores = 3;
+    float total_memory_gb = 4;
+    int32 total_gpus = 5;
+}
+
+message JobSummary {
+    string job_id = 1;
+    string name = 2;
+    string status = 3;      // 'pending', 'running', 'completed', 'failed'
+    float progress = 4;
+    int32 num_workers = 5;
+    string model_type = 6;
+    int32 epochs = 7;
+    int32 current_epoch = 8;
+    float current_loss = 9;
+    float current_accuracy = 10;
+    int64 start_time = 11;
+    int64 end_time = 12;
+}
+
+message JobLogRequest {
+    string job_id = 1;
+    int32 since_step = 2;
+}
+
+message LogEntry {
+    int32 step = 1;
+    int32 epoch = 2;
+    float loss = 3;
+    float accuracy = 4;
+    int64 timestamp = 5;
+    string worker_id = 6;
+    int32 rank = 7;
+}
